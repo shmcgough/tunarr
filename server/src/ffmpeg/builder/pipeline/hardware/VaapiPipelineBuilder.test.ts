@@ -1680,6 +1680,86 @@ describe('VaapiPipelineBuilder tonemap', () => {
     const filterHwDeviceArgIdx = argsString.indexOf('-filter_hw_device');
     expect(filterHwDeviceArgIdx).toBeLessThan(hwuploadIdx);
   });
+
+  describe('TUNARR_VAAPI_TONEMAP_PREFERENCE', () => {
+    // 3840x2080 (wider than 16:9) scales to 1920x1040 and needs padding to 1080.
+    const wideHdrStream = () =>
+      VideoStream.create({
+        index: 0,
+        codec: 'hevc',
+        profile: 'main 10',
+        pixelFormat: new PixelFormatYuv420P10Le(),
+        frameSize: FrameSize.withDimensions(3840, 2080),
+        displayAspectRatio: '24:13',
+        providedSampleAspectRatio: '1:1',
+        colorFormat: new ColorFormat({
+          colorRange: ColorRanges.Tv,
+          colorSpace: ColorSpaces.Bt2020nc,
+          colorPrimaries: ColorPrimaries.Bt2020,
+          colorTransfer: ColorTransferFormats.Smpte2084,
+        }),
+      });
+
+    const allFilters = () =>
+      new FfmpegCapabilities(
+        new Set(),
+        new Map(),
+        new Set([
+          KnownFfmpegFilters.TonemapVaapi,
+          KnownFfmpegFilters.TonemapOpencl,
+          KnownFfmpegFilters.PadVaapi,
+        ]),
+        new Set(),
+      );
+
+    const build = () => {
+      const stream = wideHdrStream();
+      return buildWithTonemap({
+        videoStream: stream,
+        binaryCapabilities: allFilters(),
+        openclInterop: true,
+        stateVaapiDevice: '/dev/dri/renderD128',
+        // Default HEVC output: the fake GPU only advertises HEVC encode, so
+        // any other format would force a software encode and its own download.
+        desiredState: { scaledSize: stream.squarePixelFrameSize(FrameSize.FHD) },
+      });
+    };
+
+    test('vaapi overrides the opencl preference even when OpenCL interop works', () => {
+      process.env[TONEMAP_ENABLED] = 'true';
+      process.env[TUNARR_ENV_VARS.VAAPI_TONEMAP_PREFERENCE] = 'vaapi';
+
+      const pipeline = build();
+      const args = pipeline.getCommandArgs().join(' ');
+
+      expect(hasVaapiTonemapFilter(pipeline)).to.eq(true);
+      expect(hasOpenclTonemapFilter(pipeline)).to.eq(false);
+      expect(args).not.toContain('derive_device=opencl');
+    });
+
+    test('with vaapi, tonemapped HDR is padded on the GPU without a download', () => {
+      process.env[TONEMAP_ENABLED] = 'true';
+      process.env[TUNARR_ENV_VARS.VAAPI_TONEMAP_PREFERENCE] = 'vaapi';
+
+      const args = build().getCommandArgs().join(' ');
+
+      expect(args).toContain('tonemap_vaapi');
+      expect(args).toContain('pad_vaapi=w=1920:h=1080');
+      expect(args).not.toContain('hwdownload');
+      expect(args).not.toContain('pad=1920:1080');
+    });
+
+    test('unset keeps upstream: opencl tonemap and a software pad for HDR', () => {
+      process.env[TONEMAP_ENABLED] = 'true';
+
+      const pipeline = build();
+      const args = pipeline.getCommandArgs().join(' ');
+
+      expect(hasOpenclTonemapFilter(pipeline)).to.eq(true);
+      expect(args).not.toContain('pad_vaapi');
+      expect(args).toContain('pad=1920:1080');
+    });
+  });
 });
 
 describe('VaapiPipelineBuilder scale', () => {

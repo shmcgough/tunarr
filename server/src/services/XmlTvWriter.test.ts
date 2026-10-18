@@ -257,6 +257,42 @@ describe('XmlTvWriter', () => {
     });
   });
 
+  describe('channel display names', () => {
+    const NameFirst = 'TUNARR_XMLTV_NAME_FIRST';
+
+    afterEach(() => {
+      delete process.env[NameFirst];
+    });
+
+    function displayNames() {
+      const writer = new XmlTvWriter(inMemorySettingsDB());
+      const xmltv = writer.generateXmltv([
+        {
+          channel: createChannelOrm({ number: 4, name: 'Sci-Fi & Fantasy' }),
+          programs: [],
+        },
+      ]);
+      return xmltv.channels?.[0]?.displayName.map((d) => d._value);
+    }
+
+    test('unset keeps upstream: number and name first', () => {
+      expect(displayNames()).toEqual([
+        '4 Sci-Fi &amp; Fantasy',
+        '4',
+        'Sci-Fi &amp; Fantasy',
+      ]);
+    });
+
+    test('TUNARR_XMLTV_NAME_FIRST puts the bare name first', () => {
+      process.env[NameFirst] = 'true';
+      expect(displayNames()).toEqual([
+        'Sci-Fi &amp; Fantasy',
+        '4',
+        '4 Sci-Fi &amp; Fantasy',
+      ]);
+    });
+  });
+
   describe('serialized program order', () => {
     function serializeProgram(program: ProgramWithRelationsOrm) {
       const writer = new XmlTvWriter(inMemorySettingsDB());

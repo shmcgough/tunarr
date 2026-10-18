@@ -37,6 +37,7 @@ import type { VaapiTonemapType } from '@/ffmpeg/builder/state/FfmpegState.js';
 import type { FrameState } from '@/ffmpeg/builder/state/FrameState.js';
 import type { Maybe, Nullable } from '@/types/util.js';
 import { isDefined, isNonEmptyString } from '@/util/index.js';
+import { vaapiTonemapPreferenceOverride } from '@/util/startupTuning.js';
 import { every, head, inRange } from 'lodash-es';
 import { P, match } from 'ts-pattern';
 import {
@@ -72,6 +73,11 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
   // hwdownload+hwupload cycle that breaks with the named init_hw_device setup
   // required for tonemap_opencl.
   private willUseOpenclTonemap = false;
+  // Set in setHardwareAccelState(). When TUNARR_VAAPI_TONEMAP_PREFERENCE=vaapi
+  // and HDR content is tonemapped with tonemap_vaapi, frames are already
+  // 8-bit SDR on the GPU, so they can be padded with pad_vaapi instead of
+  // downloading every frame for a software pad.
+  private padHdrOnHardwareAfterVaapiTonemap = false;
 
   constructor(
     private hardwareCapabilities: BaseFfmpegHardwareCapabilities,
@@ -122,6 +128,13 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
         isVideoPipelineContext(this.context) &&
         isHdrContent(this.context.videoStream) &&
         this.selectHardwareTonemap() === 'opencl';
+      this.padHdrOnHardwareAfterVaapiTonemap =
+        vaapiTonemapPreferenceOverride() === 'vaapi' &&
+        !pipelineOptions?.disableHardwareFilters &&
+        this.featureFlagService.get('tonemapEnabled') &&
+        isVideoPipelineContext(this.context) &&
+        isHdrContent(this.context.videoStream) &&
+        this.selectHardwareTonemap() === 'vaapi';
 
       this.pipelineSteps.push(
         new VaapiHardwareAccelerationOption(
@@ -406,6 +419,7 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
   // software tonemapping.
   private selectHardwareTonemap(): VaapiTonemapType | undefined {
     const preference =
+      vaapiTonemapPreferenceOverride() ??
       this.context.pipelineOptions?.vaapiPipelineOptions?.tonemapPreference ??
       'opencl';
     const order: VaapiTonemapType[] =
@@ -504,7 +518,10 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
       this.featureFlagService.get('disableVaapiPad') ||
       this.context.pipelineOptions.disableHardwareFilters;
     let padFilter: Maybe<FilterOption>;
-    if (isHdrContent(this.context.videoStream)) {
+    if (
+      isHdrContent(this.context.videoStream) &&
+      !this.padHdrOnHardwareAfterVaapiTonemap
+    ) {
       padFilter = PadFilter.create(currentState, this.desiredState);
     } else if (
       !disableHardwarePad &&
@@ -697,7 +714,10 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
       return false;
     }
 
-    if (isHdrContent(this.context.videoStream)) {
+    if (
+      isHdrContent(this.context.videoStream) &&
+      !this.padHdrOnHardwareAfterVaapiTonemap
+    ) {
       return false;
     }
 

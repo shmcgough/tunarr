@@ -4,6 +4,7 @@ import { Session } from '@/stream/Session.js';
 import { Result } from '@/types/result.js';
 import type { FfmpegTranscodeSession } from '@/ffmpeg/FfmpegTrancodeSession.js';
 import { isNonEmptyString, timeoutPromise } from '@/util/index.js';
+import { hlsReadyRetryOptions } from '@/util/startupTuning.js';
 import retry from 'async-retry';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -250,13 +251,9 @@ export abstract class BaseHlsSession<
             throw new Error('Stream not ready yet. Retry');
           }
         },
-        {
-          retries: 15,
-          factor: 1,
-          minTimeout: 1000,
-          maxTimeout: 1000,
-          randomize: false,
-        },
+        // Poll interval configurable (TUNARR_HLS_READY_POLL_MS),
+        // same ~15s budget; defaults to upstream's 15 x 1000ms.
+        hlsReadyRetryOptions(),
       );
 
       this.logger.debug('Stream successfully started!');

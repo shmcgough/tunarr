@@ -6,7 +6,7 @@ import { NoHardwareCapabilities } from '@/ffmpeg/builder/capabilities/NoHardware
 import { VaapiHardwareCapabilitiesParser } from '@/ffmpeg/builder/capabilities/VaapiHardwareCapabilitiesParser.js';
 import { ChildProcessHelper } from '@/util/ChildProcessHelper.js';
 import { cacheGetOrSet } from '@/util/cache.js';
-import dayjs from '@/util/dayjs.js';
+import { hwCapsCacheTtlSeconds } from '@/util/startupTuning.js';
 import { attempt, isLinux, isNonEmptyString, isWindows } from '@/util/index.js';
 import type { Logger } from '@/util/logging/LoggerFactory.js';
 import { LoggerFactory } from '@/util/logging/LoggerFactory.js';
@@ -24,8 +24,9 @@ export class VaapiHardwareCapabilitiesFactory
     }));
   }
 
+  // TTL is configurable (TUNARR_HW_CAPS_CACHE_SECONDS); 1h default.
   private static cache = new NodeCache({
-    stdTTL: dayjs.duration({ hours: 1 }).asSeconds(),
+    stdTTL: hwCapsCacheTtlSeconds(),
   });
 
   private static vaInfoCacheKey(

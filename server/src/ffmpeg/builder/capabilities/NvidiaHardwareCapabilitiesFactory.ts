@@ -7,7 +7,7 @@ import { NoHardwareCapabilities } from '@/ffmpeg/builder/capabilities/NoHardware
 import { NvidiaHardwareCapabilities } from '@/ffmpeg/builder/capabilities/NvidiaHardwareCapabilities.js';
 import { ChildProcessHelper } from '@/util/ChildProcessHelper.js';
 import { cacheGetOrSet } from '@/util/cache.js';
-import dayjs from '@/util/dayjs.js';
+import { hwCapsCacheTtlSeconds } from '@/util/startupTuning.js';
 import { InjectLogger } from '@/util/inject.js';
 import { type Logger, LoggerFactory } from '@/util/logging/LoggerFactory.js';
 import { injectable } from 'inversify';
@@ -35,8 +35,9 @@ export class NvidiaHardwareCapabilitiesFactory
     }));
   }
 
+  // TTL is configurable (TUNARR_HW_CAPS_CACHE_SECONDS); 1h default.
   private static cache = new NodeCache({
-    stdTTL: dayjs.duration({ hours: 1 }).asSeconds(),
+    stdTTL: hwCapsCacheTtlSeconds(),
   });
 
   private static makeCacheKey(path: string, command: string): string {

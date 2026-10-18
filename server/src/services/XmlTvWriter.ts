@@ -2,6 +2,7 @@ import type { SettingsDB } from '@/db/SettingsDB.js';
 import type { ChannelOrm } from '@/db/schema/Channel.js';
 import { KEYS } from '@/types/inject.js';
 import { getChannelId } from '@/util/channels.js';
+import { getBooleanEnvVar, TUNARR_ENV_VARS } from '@/util/env.js';
 import { resolveIconUrl } from '@/util/iconUtil.js';
 import { firstDefined, groupByFunc, isNonEmptyString } from '@/util/index.js';
 import { LoggerFactory } from '@/util/logging/LoggerFactory.js';
@@ -167,19 +168,25 @@ export class XmlTvWriter {
     channel: ChannelOrm,
     xmlChannelId: string,
   ): XmltvChannel {
+    const displayName = [
+      {
+        _value: `${channel.number} ${escape(channel.name)}`,
+      },
+      {
+        _value: `${channel.number}`,
+      },
+      {
+        _value: escape(channel.name),
+      },
+    ];
+    // Plex labels a channel with its first display-name and already shows
+    // the channel number beside it, so upstream's order reads "1 1 Comedy".
+    if (getBooleanEnvVar(TUNARR_ENV_VARS.XMLTV_NAME_FIRST, false)) {
+      displayName.reverse();
+    }
     const partial: XmltvChannel = {
       id: xmlChannelId,
-      displayName: [
-        {
-          _value: `${channel.number} ${escape(channel.name)}`,
-        },
-        {
-          _value: `${channel.number}`,
-        },
-        {
-          _value: escape(channel.name),
-        },
-      ],
+      displayName,
     };
 
     const iconSrc = resolveIconUrl(channel.icon, '{{host}}/images/tunarr.png');

@@ -57,6 +57,7 @@ import type {
   PipelineStep,
 } from '@/ffmpeg/builder/types/PipelineStep.js';
 import type { DataProps, Nilable, Nullable } from '@/types/util.js';
+import { hlsWrapInitialBurstSeconds } from '@/ffmpeg/builder/options/input/hlsWrapInitialBurst.js';
 import { ifDefined, isNonEmptyString } from '@/util/index.js';
 import type { Logger } from '@/util/logging/LoggerFactory.js';
 import { LoggerFactory } from '@/util/logging/LoggerFactory.js';
@@ -315,8 +316,12 @@ export abstract class BasePipelineBuilder implements PipelineBuilder {
     }
 
     input.addOption(new RealtimeBufferSizeInputOption('15M'));
+    // Optional initial burst; see hlsWrapInitialBurstSeconds().
     input.addOption(
-      new ReadrateInputOption(this.ffmpegCapabilities, 0 /*, 1.5*/),
+      new ReadrateInputOption(
+        this.ffmpegCapabilities,
+        hlsWrapInitialBurstSeconds() /*, 1.5*/,
+      ),
     );
     if (state.metadataServiceName) {
       pipelineSteps.push(
